@@ -1,0 +1,13 @@
+.Rproj.user/
+.Rhistory
+.Rdata
+.Ruserdata
+.Rapp.history
+cache/
+renv/library/
+renv/staging/
+renv/sandbox/
+*.log
+.DS_Store
+data/processed/*
+!data/processed/nfl_games.csv

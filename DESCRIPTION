@@ -1,0 +1,23 @@
+Package: homeedge
+Type: Project
+Title: Is Home-Field Advantage Shrinking? Measurement Pipeline
+Version: 0.1.0
+Authors@R: person("home-edge contributors", role = c("aut", "cre"))
+Description: Reproducible schedules, pregame team-strength model, and charts
+    comparing ways of measuring home advantage in MLB, NBA, NFL, and NHL.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Imports:
+    curl,
+    dplyr,
+    fastRhockey,
+    ggplot2,
+    ggrepel,
+    hoopR,
+    jsonlite,
+    nflreadr,
+    readr,
+    baseballr,
+    testthat
+Suggests:
+    withr
