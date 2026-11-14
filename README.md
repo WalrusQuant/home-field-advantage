@@ -9,10 +9,25 @@ Lead leagues in the figures are the NBA and the NFL. The same pipeline covers ML
 You need R 4.3 or later and a network connection the first time, because the schedule files are downloaded rather than stored here.
 
 ```bash
-install.packages("renv")   # once, if you do not have it
-renv::restore()            # from an R session started in this directory
+make restore              # installs the locked packages into the project library
 Rscript run_all.R
 ```
+
+If an interrupted restore leaves R unable to start, `make restore` bypasses the
+project startup profile and repairs the project library. Restart R afterward.
+The lockfile records R 4.3.3; on newer R versions some pinned packages may need
+to compile from source.
+
+To run with packages already installed in your regular R library:
+
+```bash
+HOME_EDGE_NO_RENV=1 Rscript run_all.R
+HOME_EDGE_NO_RENV=1 make test
+```
+
+This bypass is useful for local diagnosis, but does not guarantee the exact
+package versions in `renv.lock`. `CHARTS_ONLY=1` requires only the chart packages,
+not the sports download packages.
 
 `run_all.R` is the entry point. It downloads schedules into `cache/` (gitignored), builds the game table, fits the pregame model, writes `outputs/tables/`, and draws `outputs/charts/`. A full run is dominated by the downloads, especially the NHL club schedules.
 
@@ -32,7 +47,7 @@ The reported window is seasons that start in 2010 through the last completed sea
 
 ## The measurement
 
-For every game the model produces a **pregame** neutral-site expected margin and win probability. The fit for a date uses only games before that date. Games on the same date share one fit.
+For every game the model produces a **pregame** neutral-site expected margin and win probability. The fit for a date uses only results available before that date. For suspended MLB games, predictions retain the original start date, but the final outcome enters training only after the completion date. Games on the same date share one fit.
 
 The model is exponentially weighted ridge regression:
 
@@ -40,7 +55,7 @@ The model is exponentially weighted ridge regression:
 
 Margin is the final score, overtime included. Team strengths shrink toward zero. The home term shrinks toward a weak round prior (2.5 NBA or NFL points, 0.25 NHL goals, 0.20 MLB runs). Half-lives are 150 days (NBA, NHL), 200 days (NFL), and 120 days (MLB). Penalties are 4 games of weight for a team rating and 10 for the home term. These were set before looking at the home-edge results and are not tuned to them. They live in `R/config.R`.
 
-A true home game is a designated home game at the franchise's usual city. The home term is turned off for neutral sites, the 2020 NBA bubble, makeshift homes (a club's whole season more than 50 miles from its usual city, with the surrounding seasons back at that city), and one-off games more than 50 miles away. Fifty miles is wide enough to keep a cross-town move and narrow enough that Toronto to Buffalo (about 60 miles) does not count as home. Those games still update team strengths.
+A true home game is a designated home game at the franchise's usual city. The home term is turned off for neutral sites, the 2020 NBA bubble, makeshift homes (a temporary venue more than 50 miles from its usual city, labeled retrospectively from surrounding seasons), and one-off games more than 50 miles away. Fifty miles is wide enough to keep a cross-town move and narrow enough that Toronto to Buffalo (about 60 miles) does not count as home. Those games still update team strengths. The retrospective makeshift label cannot change home eligibility: both makeshift and other off-campus games are model-neutral.
 
 **Leftover margin** is the actual margin minus the pregame neutral expected margin. It is the home residual after team strength. **Leftover win probability** is the home result (a tie counts as one half) minus the neutral-site win probability. Win probability is the normal cdf of expected margin over the pregame residual standard deviation.
 
@@ -49,13 +64,13 @@ The four measures on the same games:
 1. Raw home win rate. No model.
 2. One league-wide leftover margin per season (the mean residual above). A within-season joint home coefficient is stored beside it as `joint_home_term`.
 3. The same leftover on the win-probability scale.
-4. Team-specific home residuals, shrunk toward that season's league mean (partial pooling). The chart shows the spread of those shrunk values, as an IQR.
+4. Team-specific home residuals, shrunk toward that season's league mean (partial pooling, with a sample-size-weighted method-of-moments variance estimate). The chart shows the spread of those shrunk values, as an IQR.
 
-Intervals are 95% cluster-bootstrap intervals, resampling home teams and keeping every game of a drawn team. They treat the pregame ratings as fixed, so they do not include uncertainty from the rating step. `B = 1000`.
+Intervals are 95% cluster-bootstrap intervals, resampling home teams and keeping every game of a drawn team. They treat the pregame ratings as fixed, so they do not include uncertainty from the rating step. `B = 1000`. Team-spread intervals refit the pooling estimate inside each bootstrap draw.
 
 Pregame gaps for the tier chart are fixed cuts of `|neutral margin| / sigma`: under 0.25 (coin-flip), 0.25 to 0.75 (modest), and 0.75 or more (big).
 
-The model is checked with log loss and a calibration plot against two baselines: a coin flip, and the league's own home win rate before that date. Lower log loss is better. That check is about the ratings, not about wagering. Odds and point spreads that ship inside the nflverse schedule file are not read into this project's tables.
+The model is checked with log loss and a calibration plot against two baselines: a coin flip, and the league's own home win rate before that date, with the same warmup window and outcome-availability rules as the model. Lower log loss is better. That check is about the ratings, not about wagering. Odds and point spreads that ship inside the nflverse schedule file are not read into this project's tables.
 
 ## Data sources and credits
 
@@ -75,6 +90,11 @@ Game-level files for NBA, MLB, and NHL are rebuilt by the scripts and are not co
 Code in this repository is MIT. See `LICENSE`. The data licenses above are narrower than the code license and govern the schedules.
 
 ## Results
+
+**Audit note:** the checked-in results below predate the suspended-game,
+validation-baseline, and pooling corrections. Rebuild with `Rscript run_all.R`
+before using their numerical conclusions. See `tasks/audit.md` for verification
+and remaining limitations.
 
 <!-- RESULTS:START -->
 Numbers below are read from `outputs/tables/` after the pipeline run. Intervals are 95% cluster-bootstrap intervals by home team.

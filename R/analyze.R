@@ -34,14 +34,16 @@ shrink_one_season <- function(df) {
   vars <- vapply(sp, function(z) if (length(z) > 1L) stats::var(z) else NA_real_, numeric(1))
   s2_den <- sum((n - 1L)[n > 1L])
   s2 <- if (s2_den > 0) sum((n - 1L) * vars, na.rm = TRUE) / s2_den else stats::var(x)
-  if (!is.finite(s2) || s2 <= 0) s2 <- stats::var(x)
+  if (!is.finite(s2)) s2 <- stats::var(x)
   mu <- mean(x)
   use <- n >= 8L
   tau2 <- 0
   if (sum(use) >= 4L && is.finite(s2)) {
     center <- stats::weighted.mean(raw[use], n[use])
-    var_m <- sum(n[use] * (raw[use] - center)^2) / sum(n[use])
-    tau2 <- max(0, var_m - mean(s2 / n[use]))
+    total_n <- sum(n[use])
+    q <- sum(n[use] * (raw[use] - center)^2)
+    tau_den <- total_n - sum(n[use]^2) / total_n
+    tau2 <- max(0, (q - (sum(use) - 1L) * s2) / tau_den)
   }
   shrink <- (s2 / n) / (s2 / n + tau2)
   shrink[!is.finite(shrink)] <- 1
@@ -58,6 +60,29 @@ shrink_one_season <- function(df) {
       stringsAsFactors = FALSE
     )
   )
+}
+
+# Refit pooling in every home-team cluster draw. Repeated teams must get
+# distinct cluster IDs, otherwise their games are pooled as one larger team.
+boot_shrunk_iqr <- function(df, label, B = boot_B) {
+  ok <- is.finite(df$leftover_margin) & !is.na(df$home_franchise)
+  parts <- split(df$leftover_margin[ok], df$home_franchise[ok])
+  n <- length(parts)
+  if (n < 4L) {
+    return(data.frame(n = n, estimate = NA_real_, lo = NA_real_, hi = NA_real_))
+  }
+  estimate <- stats::IQR(shrink_one_season(df)$rows$leftover_shrunk)
+  set.seed(label_seed(label))
+  boot <- replicate(B, {
+    sampled <- parts[sample.int(n, n, replace = TRUE)]
+    draw <- data.frame(
+      leftover_margin = unlist(sampled, use.names = FALSE),
+      home_franchise = rep(seq_len(n), lengths(sampled))
+    )
+    stats::IQR(shrink_one_season(draw)$rows$leftover_shrunk)
+  })
+  qs <- stats::quantile(boot, c(0.025, 0.975), names = FALSE)
+  data.frame(n = n, estimate = estimate, lo = qs[1], hi = qs[2])
 }
 
 joint_for <- function(df) {
@@ -110,7 +135,7 @@ run_analysis <- function(games) {
       all_sl <- games[games$league == lg & games$season_start == yr & games$season_start >= warmup_start_year, , drop = FALSE]
       stats <- edge_pair(sl, sprintf("%s|%s|season", lg, yr))
       shr <- shrink_one_season(sl)
-      iqr <- boot_iqr(shr$rows$leftover_shrunk, sprintf("%s|%s|iqr", lg, yr))
+      iqr <- boot_shrunk_iqr(sl, sprintf("%s|%s|iqr", lg, yr))
       # Raw home win on the same rows, for the shrunk table.
       if (nrow(shr$rows)) {
         raw_by <- tapply(sl$home_win, sl$home_franchise, mean)
@@ -283,12 +308,20 @@ validation_table <- function(games) {
   summaries <- list()
   calibrations <- list()
   for (lg in c("MLB", "NBA", "NFL", "NHL")) {
-    sub <- games[games$league == lg & games$season_complete & games$season_start >= report_start_year, , drop = FALSE]
+    # Give the baseline the same historical window as the pregame model,
+    # then restrict scoring (not its training history) to the report window.
+    sub <- games[games$league == lg & games$season_start >= warmup_start_year, , drop = FALSE]
     sub <- sub[order(sub$game_date, sub$game_id), ]
+    sub$naive_home_probability <- naive_home_prob(sub)
+    score <- sub$season_complete & sub$season_start >= report_start_year
+    if ("outcome_date" %in% names(sub)) {
+      score <- score & !is.na(sub$outcome_date) & as.Date(sub$outcome_date) <= study_as_of
+    }
+    sub <- sub[which(score), , drop = FALSE]
     decisive <- sub$home_win %in% c(0, 1) & is.finite(sub$p_home)
     y <- sub$home_win[decisive]
     p_model <- sub$p_home[decisive]
-    p_naive <- naive_home_prob(sub)[decisive]
+    p_naive <- sub$naive_home_probability[decisive]
     p_coin <- rep(0.5, sum(decisive))
     logloss <- function(p) {
       p <- pmin(pmax(p, 1e-6), 1 - 1e-6)
@@ -331,18 +364,22 @@ validation_table <- function(games) {
 }
 
 naive_home_prob <- function(sub) {
-  home <- sub$site_class == "home"
+  home <- sub$site_class %in% "home"
   rate <- rep(0.5, nrow(sub))
-  if (!any(home)) return(rate)
-  day <- as.character(sub$game_date)
-  home_days <- sort(unique(day[home]))
-  sums <- tapply(sub$home_win[home], day[home], sum)[home_days]
-  ns <- tapply(sub$home_win[home], day[home], length)[home_days]
-  before_sum <- c(0, cumsum(sums)[-length(sums)])
-  before_n <- c(0, cumsum(ns)[-length(ns)])
-  day_rate <- ifelse(before_n > 0, before_sum / before_n, 0.5)
-  names(day_rate) <- home_days
-  rate[home] <- unname(day_rate[day[home]])
+  outcome_day <- if ("outcome_date" %in% names(sub)) as.Date(sub$outcome_date) else as.Date(sub$game_date)
+  known <- home & !is.na(outcome_day) & is.finite(sub$home_win)
+  if (!any(known)) return(rate)
+  days <- sort(unique(as.character(outcome_day[known])))
+  sums <- tapply(sub$home_win[known], as.character(outcome_day[known]), sum)[days]
+  ns <- tapply(sub$home_win[known], as.character(outcome_day[known]), length)[days]
+  # Only completed outcomes strictly before the prediction date are available.
+  # A suspended game's result enters history on its completion date, not start.
+  predict <- which(home & !is.na(sub$game_date))
+  before <- findInterval(as.numeric(as.Date(sub$game_date[predict])) - 1,
+                         as.numeric(as.Date(days)))
+  totals <- c(0, cumsum(sums))[before + 1L]
+  counts <- c(0, cumsum(ns))[before + 1L]
+  rate[predict] <- ifelse(counts > 0, totals / counts, 0.5)
   rate
 }
 

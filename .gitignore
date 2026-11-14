@@ -11,3 +11,19 @@ renv/sandbox/
 .DS_Store
 data/processed/*
 !data/processed/nfl_games.csv
+renv/bootstrap/
+renv/local/
+
+# Local credentials and session state
+.env
+.env.*
+!.env.example
+.Renviron
+.Renviron.*
+.RData
+.RDataTmp
+.Rhistory.*
+.aws/
+.ssh/
+*.pem
+*.key

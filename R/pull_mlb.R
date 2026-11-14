@@ -7,7 +7,7 @@ neutral_park_ids <- function() {
 }
 
 pull_mlb <- function() {
-  cache_rds(path_in("cache", "raw", "mlb_games.rds"), {
+  cache_rds(path_in("cache", "raw", "mlb_games_v2.rds"), {
     parks <- load_retrosheet_parks()
     pieces <- list()
     for (year in 1970:2026) {
@@ -102,6 +102,7 @@ read_retrosheet_year <- function(year) {
     league = "MLB",
     game_id = paste("MLB", raw[[1]], raw[[7]], raw[[4]], raw[[2]], sep = "-"),
     game_date = parse_date(raw[[1]]),
+    outcome_date = retrosheet_outcome_date(raw[[1]], raw[[14]]),
     season_start = season_start,
     season_end = season_start,
     week = NA_integer_,
@@ -125,6 +126,21 @@ read_retrosheet_year <- function(year) {
   )
 }
 
+# Column 14 starts with the completion date; scores remain attached to the
+# original start date. Malformed completion metadata must never fall back to start.
+retrosheet_outcome_date <- function(start, completion) {
+  out <- parse_date(start)
+  suspended <- !is.na(completion) & nzchar(trimws(completion))
+  value <- substr(trimws(completion[suspended]), 1, 8)
+  completed <- as.Date(value, format = "%Y%m%d")
+  if (any(!grepl("^[0-9]{8}$", value) | is.na(completed) |
+          completed < out[suspended])) {
+    stop("Invalid Retrosheet completion date")
+  }
+  out[suspended] <- completed
+  out
+}
+
 read_mlb_api_year <- function(year) {
   raw <- tryCatch(
     baseballr::mlb_schedule(season = year, level_ids = "1"),
@@ -134,6 +150,10 @@ read_mlb_api_year <- function(year) {
     }
   )
   if (is.null(raw) || !nrow(raw)) return(NULL)
+  tidy_mlb_api(raw, year)
+}
+
+tidy_mlb_api <- function(raw, year) {
   needed <- c(
     "game_type", "official_date", "game_pk", "teams_home_score", "teams_away_score",
     "teams_home_team_name", "teams_away_team_name", "venue_name", "status_abstract_game_state"
@@ -142,14 +162,36 @@ read_mlb_api_year <- function(year) {
   if (length(missing)) {
     stop("baseballr::mlb_schedule is missing columns: ", paste(missing, collapse = ", "))
   }
-  keep <- raw$game_type == "R" & raw$status_abstract_game_state == "Final"
+  # The schedule's resume timestamp is not a verified completion timestamp.
+  # Until that contract can be verified, exclude every identified resumed game.
+  # A metadata-stripped feed cannot establish which games were suspended.
+  resume_cols <- grep("^(resume|resumed)_", names(raw), value = TRUE)
+  if (!length(resume_cols) || !"status_detailed_state" %in% names(raw)) {
+    stop("MLB API season ", year,
+         ": suspension/status metadata unavailable; outcome dates cannot be verified. ",
+         "Fetch an unstripped MLB schedule with resume/resumed fields before continuing.")
+  }
+  suspended <- Reduce(`|`, lapply(raw[resume_cols], function(x) {
+    !is.na(x) & nzchar(trimws(as.character(x)))
+  }))
+  suspended <- suspended | grepl("suspend|resum", raw$status_detailed_state, ignore.case = TRUE)
+  # Exclude all records for the same game, including duplicate schedule entries.
+  suspended <- raw$game_pk %in% raw$game_pk[suspended]
+  if (any(suspended)) say("Excluding ", sum(suspended), " MLB API rows in ", year,
+                         ": suspended/resumed game completion dates are unverified")
+  keep <- raw$game_type %in% "R" & raw$status_abstract_game_state %in% "Final" &
+    raw$status_detailed_state %in% c("Final", "Game Over", "Completed Early") & !suspended
   df <- raw[keep, , drop = FALSE]
+  if (anyNA(parse_date(df$official_date))) {
+    stop("MLB API has missing/invalid official dates; cannot establish outcome dates")
+  }
   home_score <- suppressWarnings(as.numeric(df$teams_home_score))
   away_score <- suppressWarnings(as.numeric(df$teams_away_score))
   played <- is.finite(home_score) & is.finite(away_score)
   df <- df[played, , drop = FALSE]
   home_score <- home_score[played]
   away_score <- away_score[played]
+  if (!nrow(df)) return(NULL)
   season_start <- rep(as.integer(year), nrow(df))
   home_fr <- map_mlb_name(df$teams_home_team_name)
   away_fr <- map_mlb_name(df$teams_away_team_name)
@@ -161,6 +203,7 @@ read_mlb_api_year <- function(year) {
     league = "MLB",
     game_id = paste("MLBAPI", df$game_pk, game_number, sep = "-"),
     game_date = parse_date(df$official_date),
+    outcome_date = parse_date(df$official_date),
     season_start = season_start,
     season_end = season_start,
     week = NA_integer_,

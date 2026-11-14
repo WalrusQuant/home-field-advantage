@@ -67,7 +67,8 @@ tz_cross_hours <- function(prev_tz, prev_date, tz, date) {
   prev_tz <- normalize_tz(prev_tz)
   tz <- normalize_tz(tz)
   same <- !is.na(prev_tz) & !is.na(tz) & prev_tz == tz
-  cross <- tz_offset_hours(tz, date) - tz_offset_hours(prev_tz, prev_date)
+  # Compare both clocks on arrival day, so elapsed DST changes are not travel.
+  cross <- tz_offset_hours(tz, date) - tz_offset_hours(prev_tz, date)
   cross[same] <- 0
   cross
 }

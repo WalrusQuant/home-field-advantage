@@ -21,18 +21,21 @@ if (file.exists("renv/activate.R") && Sys.getenv("HOME_EDGE_NO_RENV", "") != "1"
   source("renv/activate.R")
 }
 
-suppressPackageStartupMessages({
-  library(dplyr)
-  library(ggplot2)
-  library(readr)
-  library(ggrepel)
-  library(jsonlite)
-  library(curl)
-  library(hoopR)
-  library(nflreadr)
-  library(baseballr)
-  library(fastRhockey)
-})
+charts_only <- Sys.getenv("CHARTS_ONLY", "") == "1"
+packages <- c("dplyr", "ggplot2", "readr", "ggrepel")
+if (!charts_only) {
+  packages <- c(packages, "jsonlite", "curl", "hoopR", "nflreadr", "baseballr", "fastRhockey")
+}
+for (pkg in packages) {
+  tryCatch(
+    suppressPackageStartupMessages(library(pkg, character.only = TRUE)),
+    error = function(e) stop(
+      "Cannot load ", pkg, ": ", conditionMessage(e),
+      "\nRun `make restore` from the repository root, then restart R.",
+      call. = FALSE
+    )
+  )
+}
 
 source("R/config.R")
 source("R/utils.R")
@@ -51,16 +54,6 @@ source("R/summary.R")
 
 options(timeout = max(getOption("timeout"), 600))
 started <- Sys.time()
-
-bind_rows_fill <- function(frames) {
-  cols <- unique(unlist(lapply(frames, names)))
-  aligned <- lapply(frames, function(df) {
-    missing <- setdiff(cols, names(df))
-    for (col in missing) df[[col]] <- NA
-    df[, cols, drop = FALSE]
-  })
-  do.call(rbind, aligned)
-}
 
 write_public_nfl <- function(games) {
   keep <- c(
@@ -96,7 +89,7 @@ write_versions <- function() {
   readr::write_csv(info, path_in("outputs", "package_versions.csv"))
 }
 
-if (Sys.getenv("CHARTS_ONLY", "") == "1") {
+if (charts_only) {
   say("Redrawing charts from existing tables")
   run_charts()
   write_results()
@@ -108,7 +101,7 @@ nba <- tidy_nba(pull_nba())
 nfl <- tidy_nfl(pull_nfl())
 mlb <- pull_mlb()
 nhl <- tidy_nhl(pull_nhl())
-games <- bind_rows_fill(list(nba, nfl, mlb, nhl))
+games <- dplyr::bind_rows(nba, nfl, mlb, nhl)
 games <- games[!duplicated(games$game_id), , drop = FALSE]
 missing_date <- is.na(games$game_date)
 if (any(missing_date)) say("Dropping ", sum(missing_date), " games with no parseable date")
@@ -116,6 +109,12 @@ games <- games[!missing_date, , drop = FALSE]
 future <- games$game_date > study_as_of
 if (any(future)) say("Dropping ", sum(future), " games dated after ", study_as_of)
 games <- games[!future, , drop = FALSE]
+# Scores from suspended games are not observable until their completion date.
+if (!"outcome_date" %in% names(games)) games$outcome_date <- games$game_date
+games$outcome_date[is.na(games$outcome_date)] <- games$game_date[is.na(games$outcome_date)]
+unavailable <- games$outcome_date > study_as_of
+if (any(unavailable)) say("Dropping ", sum(unavailable), " results not final as of ", study_as_of)
+games <- games[!unavailable, , drop = FALSE]
 # A 0-0 final score in these feeds is an unplayed placeholder, not a tie.
 placeholder <- games$home_score == 0 & games$away_score == 0
 if (any(placeholder)) say("Dropping ", sum(placeholder), " games scored 0-0")

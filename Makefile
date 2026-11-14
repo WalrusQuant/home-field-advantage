@@ -5,7 +5,7 @@ all: restore
 	Rscript run_all.R
 
 restore:
-	Rscript -e "if (!requireNamespace('renv', quietly = TRUE)) install.packages('renv'); renv::restore()"
+	Rscript --vanilla renv/restore.R
 
 test:
 	Rscript -e "testthat::test_dir('tests/testthat')"

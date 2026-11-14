@@ -1,7 +1,8 @@
 # Pregame team-strength model.
 #
-# For a game on date D the fit uses only games dated before D. Games on the
-# same date share one fit, so an early game cannot inform a later one that day.
+# For a game starting on date D, use only outcomes known before D. outcome_date
+# defaults to game_date; suspended games enter history after their completion
+# date. Same-day outcomes never inform predictions that day.
 #
 # The weighted least-squares model, with an L2 penalty, is
 #
@@ -13,8 +14,8 @@
 # toward a weak prior. Past games are down-weighted with a half-life in days.
 #
 # Because the weight of a game depends on age only through a^(D - d), the
-# normal equations are a scaled prefix sum and do not require a new pass over
-# the design matrix each day.
+# normal equations can be updated by decaying the running sums between dates,
+# without a new pass over the design matrix or exponentially growing weights.
 #
 # Win probability is Phi(expected margin / sigma), with sigma the weighted
 # residual standard deviation from that same pregame fit.
@@ -42,11 +43,28 @@ predict_pregame <- function(games,
     stop("Team indexes fall outside 1..n_teams.")
   }
 
+  if (!inherits(games$game_date, "Date") || any(!is.finite(games$game_date))) {
+    stop("predict_pregame game_date must contain finite Date values.")
+  }
+  outcome_date <- if ("outcome_date" %in% names(games)) games$outcome_date else games$game_date
+  if (!inherits(outcome_date, "Date") || any(!is.finite(outcome_date))) {
+    stop("predict_pregame outcome_date must contain finite Date values.")
+  }
+  if (any(outcome_date < games$game_date)) {
+    stop("predict_pregame outcome_date must be on or after game_date.")
+  }
+  if (anyNA(games$neutral) || any(!games$neutral %in% c(0, 1))) {
+    stop("predict_pregame neutral must contain only 0 or 1.")
+  }
+  if (length(half_life_days) != 1L || !is.finite(half_life_days) || half_life_days <= 0) {
+    stop("predict_pregame half_life_days must be finite and positive.")
+  }
+
   n <- nrow(games)
   date_num <- as.integer(games$game_date)
   origin <- min(date_num)
   rel <- date_num - origin
-  decay <- 0.5 ^ (1 / half_life_days)
+  outcome_rel <- as.integer(outcome_date) - origin
   home <- as.integer(games$home_ix)
   away <- as.integer(games$away_ix)
   margin <- as.numeric(games$margin)
@@ -67,19 +85,25 @@ predict_pregame <- function(games,
   ywy <- 0
   sw <- 0
 
-  ord <- order(rel, seq_len(n))
-  rel_o <- rel[ord]
-  # Prefix sums are updated after each date, so split the ordered index by date.
-  date_starts <- c(1L, which(diff(rel_o) > 0) + 1L)
-  date_ends <- c(date_starts[-1L] - 1L, n)
+  # Predict before admitting outcomes on each event date. Completion-only dates
+  # still update history; decay always measures age since the original start.
+  prediction_rows <- split(seq_len(n), rel)
+  outcome_rows <- split(seq_len(n), outcome_rel)
+  event_dates <- sort(unique(c(rel, outcome_rel)))
+  event_dates <- event_dates[event_dates <= max(rel)]
 
-  for (block in seq_along(date_starts)) {
-    idx <- ord[date_starts[block]:date_ends[block]]
-    drel <- rel_o[date_starts[block]]
-    scale <- decay ^ drel
+  previous_rel <- 0
+  for (drel in event_dates) {
+    idx <- prediction_rows[[as.character(drel)]]
+    scale <- 2 ^ (-(drel - previous_rel) / half_life_days)
+    gram <- scale * gram
+    rhs <- scale * rhs
+    ywy <- scale * ywy
+    sw <- scale * sw
+    previous_rel <- drel
 
-    g_now <- scale * gram
-    rhs_now <- scale * rhs
+    g_now <- gram
+    rhs_now <- rhs
     diag(g_now) <- diag(g_now) + c(rep(lambda_team, n_teams), lambda_home)
     rhs_now[p] <- rhs_now[p] + lambda_home * home_prior
     beta <- tryCatch(
@@ -87,9 +111,9 @@ predict_pregame <- function(games,
       error = function(e) solve(g_now + diag(1e-6, p), rhs_now)
     )
 
-    sw_now <- scale * sw
+    sw_now <- sw
     if (sw_now >= 20) {
-      sse <- scale * ywy - 2 * sum(beta * (scale * rhs)) + sum(beta * as.vector((scale * gram) %*% beta))
+      sse <- ywy - 2 * sum(beta * rhs) + sum(beta * as.vector(gram %*% beta))
       sigma <- sqrt(max(sse, 0) / sw_now)
       if (!is.finite(sigma) || sigma < sigma_floor) sigma <- sigma_floor
     } else {
@@ -110,8 +134,8 @@ predict_pregame <- function(games,
       out_as[i] <- beta[away[i]]
     }
 
-    for (i in idx) {
-      weight <- decay ^ (-rel[i])
+    for (i in outcome_rows[[as.character(drel)]]) {
+      weight <- 2 ^ (-(drel - rel[i]) / half_life_days)
       hi <- home[i]
       ai <- away[i]
       gram[hi, hi] <- gram[hi, hi] + weight
@@ -154,7 +178,7 @@ joint_home_term <- function(home_ix, away_ix, margin, n_teams, neutral = FALSE, 
   margin <- margin[ok]
   if (length(neutral) == 1L) neutral <- rep(neutral, length(ok))
   neutral <- as.logical(neutral[ok])
-  if (length(margin) < n_teams + 5L) {
+  if (length(margin) < n_teams + 5L || !any(!neutral)) {
     return(NA_real_)
   }
   p <- n_teams + 1L
@@ -203,6 +227,7 @@ fit_games <- function(games) {
     pred <- predict_pregame(
       data.frame(
         game_date = sub$game_date,
+        outcome_date = if ("outcome_date" %in% names(sub)) sub$outcome_date else sub$game_date,
         home_ix = unname(ix[sub$home_franchise]),
         away_ix = unname(ix[sub$away_franchise]),
         margin = sub$home_score - sub$away_score,

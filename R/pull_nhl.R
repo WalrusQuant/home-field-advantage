@@ -153,6 +153,14 @@ nhl_end_year <- function(season, season_full) {
 tidy_nhl <- function(raw) {
   release <- raw$release
   api <- raw$api
+  # Preserve the source status until both branches have rejected nonterminal rows.
+  for (name in c("release", "api")) {
+    if (!"game_state" %in% names(raw[[name]])) {
+      stop("NHL ", name, " schedule is missing game_state")
+    }
+  }
+  release <- release[release$game_state %in% c("OFF", "FINAL"), , drop = FALSE]
+  api <- api[api$game_state %in% c("OFF", "FINAL"), , drop = FALSE]
   keep_cols <- c(
     "game_id", "game_type", "game_date", "home_team_abbr", "away_team_abbr",
     "home_score", "away_score", "venue", "season", "season_full"
@@ -161,12 +169,12 @@ tidy_nhl <- function(raw) {
   release$game_date <- parse_date(release$game_date)
   api_ids <- as.character(api$game_id)
   release$game_id <- as.character(release$game_id)
-  flags <- api[!duplicated(api_ids) & api$game_type == "R", c("game_id", "neutral_site", "venue_tz")]
+  flags <- api[!duplicated(api_ids) & api$game_type %in% "R", c("game_id", "neutral_site", "venue_tz")]
   names(flags)[2:3] <- c("api_neutral", "api_tz")
   flags$game_id <- as.character(flags$game_id)
   df <- merge(release, flags, by = "game_id", all.x = TRUE, sort = FALSE)
   have <- as.character(df$game_id)
-  extra <- api[api$game_type == "R" & !api_ids %in% have, , drop = FALSE]
+  extra <- api[api$game_type %in% "R" & !api_ids %in% have, , drop = FALSE]
   if (nrow(extra)) {
     say("Adding ", nrow(extra), " NHL games found only on the NHL API")
     extra_df <- data.frame(
@@ -187,13 +195,20 @@ tidy_nhl <- function(raw) {
     for (col in setdiff(names(df), names(extra_df))) extra_df[[col]] <- NA
     df <- rbind(df, extra_df[, names(df), drop = FALSE])
   }
-  reg <- df$game_type == "R"
+  reg <- df$game_type %in% "R"
   home_score <- suppressWarnings(as.numeric(df$home_score))
   away_score <- suppressWarnings(as.numeric(df$away_score))
   keep <- reg & is.finite(home_score) & is.finite(away_score)
   df <- df[keep, , drop = FALSE]
   home_score <- home_score[keep]
   away_score <- away_score[keep]
+  if (!nrow(df)) {
+    out <- empty_game_skeleton()
+    out$source_home_rest <- numeric()
+    out$source_away_rest <- numeric()
+    out$venue_tz_feed <- character()
+    return(out)
+  }
   season_end <- nhl_end_year(df$season, if ("season_full" %in% names(df)) df$season_full else NA)
   season_start <- season_end - 1L
   home_fr <- require_mapped("NHL", df$home_team_abbr, map_abbrev("NHL", df$home_team_abbr), season_start, "tidy_nhl")

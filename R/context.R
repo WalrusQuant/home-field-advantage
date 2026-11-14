@@ -96,8 +96,12 @@ flag_makeshift <- function(modal) {
 
 classify_sites <- function(games) {
   off <- is.finite(games$miles_from_usual) & games$miles_from_usual > off_campus_miles
-  makeshift_game <- games$makeshift_season %in% TRUE & games$venue_key == games$modal_key
-  missing_coord <- is.na(games$lat) & !is.na(games$modal_key) & games$venue_key != games$modal_key
+  # Unknown geography cannot establish a true home site. Do not use the
+  # full-season modal venue to decide home eligibility.
+  missing_coord <- !is.finite(games$lat) | !is.finite(games$lon) |
+    !is.finite(games$miles_from_usual)
+  makeshift_game <- off & !missing_coord & games$makeshift_season %in% TRUE &
+    games$venue_key == games$modal_key
   site <- ifelse(games$bubble, "bubble", "home")
   site[site == "home" & (games$feed_neutral | games$pattern_neutral)] <- "neutral"
   site[site == "home" & makeshift_game] <- "makeshift"

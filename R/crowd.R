@@ -99,7 +99,7 @@ assign_crowd <- function(games) {
   games$crowd[nba & games$bubble] <- "bubble"
   empty_nba <- nba & !games$bubble & is.finite(games$attendance) & games$attendance <= 250
   reduced_nba <- nba & !games$bubble & is.finite(ratio) & ratio < 0.5 & !empty_nba
-  normal_nba <- nba & !games$bubble & is.finite(games$attendance) & games$attendance > 250 & !reduced_nba
+  normal_nba <- nba & !games$bubble & is.finite(games$attendance) & games$attendance > 250 & is.finite(ratio) & ratio >= 0.5
   games$crowd[empty_nba] <- "no_fans"
   games$crowd[reduced_nba] <- "reduced"
   games$crowd[normal_nba] <- "normal"
@@ -109,7 +109,7 @@ assign_crowd <- function(games) {
   games$crowd[mlb_2020] <- "no_fans"
   games$crowd_detail[mlb_2020] <- "2020 regular season was played without spectators"
   reduced_mlb <- mlb & !mlb_2020 & is.finite(ratio) & ratio < 0.5 & is.finite(games$attendance) & games$attendance > 0
-  normal_mlb <- mlb & !mlb_2020 & is.finite(games$attendance) & games$attendance > 0 & !reduced_mlb
+  normal_mlb <- mlb & !mlb_2020 & is.finite(games$attendance) & games$attendance > 0 & is.finite(ratio) & ratio >= 0.5
   games$crowd[reduced_mlb] <- "reduced"
   games$crowd[normal_mlb] <- "normal"
 

@@ -14,7 +14,7 @@ pull_nba <- function() {
     needed <- c(
       "game_id", "game_date", "season", "season_type", "type_abbreviation",
       "home_abbreviation", "away_abbreviation", "home_score", "away_score",
-      "venue_full_name", "neutral_site", "attendance"
+      "venue_full_name", "neutral_site", "attendance", "status_type_completed"
     )
     missing <- setdiff(needed, names(raw))
     if (length(missing)) {
@@ -25,7 +25,11 @@ pull_nba <- function() {
 }
 
 tidy_nba <- function(raw) {
-  reg <- as.integer(raw$season_type) == 2L & raw$type_abbreviation == "STD"
+  if (!"status_type_completed" %in% names(raw)) {
+    stop("NBA schedule is missing status_type_completed")
+  }
+  completed <- tolower(trimws(as.character(raw$status_type_completed))) %in% c("true", "1")
+  reg <- as.integer(raw$season_type) == 2L & raw$type_abbreviation == "STD" & completed
   reg[is.na(reg)] <- FALSE
   df <- raw[reg, , drop = FALSE]
   home_score <- suppressWarnings(as.numeric(df$home_score))
@@ -55,6 +59,13 @@ tidy_nba <- function(raw) {
     season_start <- season_start[!unmapped]
     home_fr <- home_fr[!unmapped]
     away_fr <- away_fr[!unmapped]
+  }
+  if (!nrow(df)) {
+    out <- empty_game_skeleton()
+    out$source_home_rest <- numeric()
+    out$source_away_rest <- numeric()
+    out$venue_tz_feed <- character()
+    return(out)
   }
   city <- if ("venue_address_city" %in% names(df)) df$venue_address_city else NA_character_
   region <- if ("venue_address_state" %in% names(df)) df$venue_address_state else NA_character_
