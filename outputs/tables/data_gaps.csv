@@ -1,0 +1,10 @@
+item,detail
+NHL attendance,"The NHL schedule feed has no game attendance. 2020-21 is labeled restricted from the season calendar, not from turnstile counts."
+NFL attendance,"nflverse schedules have no attendance. 2020 empty versus reduced games follow the spectator policies compiled on the Wikipedia 2020 NFL season page, retrieved 2026-11-14."
+MLB attendance zeros,"Outside 2020, a Retrosheet attendance of 0 is treated as unknown. In 2020 it is treated as an empty ballpark."
+MLB seasons after the Retrosheet logs,"Seasons not yet in the Retrosheet game logs, if any, come from baseballr::mlb_schedule and have no attendance."
+Coordinates,Share of games without coordinates: 0.0%. Travel rows that need those games are dropped.
+Partial seasons,NFL 2026 and the 2026-27 NBA and NHL seasons were in progress on 2026-11-14. They stay in the data and are open points on chart A. MLB 2026 regular season is treated as complete.
+Overtime and shootouts,"Margins use the published final score, including overtime. An NHL shootout win is whatever one-goal margin the NHL feed records."
+Within-metro travel,"Usual-home coordinates are city or arena-neighborhood points. Trips under about 50 miles are local travel, not surveyed stadium-to-stadium routes."
+Pregame ratings,Intervals treat the pregame ratings as fixed. They do not include uncertainty from the rating model itself. Ratings for games on the same date ignore one another.

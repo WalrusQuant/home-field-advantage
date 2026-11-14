@@ -1,0 +1,28 @@
+pattern,place_id,force_neutral,notes
+Wembley,london,TRUE,Case-insensitive match on the venue name. force_neutral marks scheduled neutral or special-event sites.
+Tottenham,london,TRUE,Case-insensitive match on the venue name. force_neutral marks scheduled neutral or special-event sites.
+Twickenham,london,TRUE,Case-insensitive match on the venue name. force_neutral marks scheduled neutral or special-event sites.
+Azteca,mexico_city,TRUE,Case-insensitive match on the venue name. force_neutral marks scheduled neutral or special-event sites.
+Allianz,munich,TRUE,Case-insensitive match on the venue name. force_neutral marks scheduled neutral or special-event sites.
+Deutsche Bank Park,frankfurt,TRUE,Case-insensitive match on the venue name. force_neutral marks scheduled neutral or special-event sites.
+Frankfurt,frankfurt,TRUE,Case-insensitive match on the venue name. force_neutral marks scheduled neutral or special-event sites.
+Corinthians,sao_paulo,TRUE,Case-insensitive match on the venue name. force_neutral marks scheduled neutral or special-event sites.
+Neo Quimica,sao_paulo,TRUE,Case-insensitive match on the venue name. force_neutral marks scheduled neutral or special-event sites.
+Gocheok,seoul,TRUE,Case-insensitive match on the venue name. force_neutral marks scheduled neutral or special-event sites.
+Seoul,seoul,TRUE,Case-insensitive match on the venue name. force_neutral marks scheduled neutral or special-event sites.
+Tokyo Dome,tokyo,TRUE,Case-insensitive match on the venue name. force_neutral marks scheduled neutral or special-event sites.
+Sydney Cricket,sydney,TRUE,Case-insensitive match on the venue name. force_neutral marks scheduled neutral or special-event sites.
+Sahlen,buffalo,FALSE,Case-insensitive match on the venue name. force_neutral marks scheduled neutral or special-event sites.
+London Stadium,london,TRUE,Case-insensitive match on the venue name. force_neutral marks scheduled neutral or special-event sites.
+Alfredo Harp,mexico_city,TRUE,Case-insensitive match on the venue name. force_neutral marks scheduled neutral or special-event sites.
+Rickwood,birmingham,TRUE,Case-insensitive match on the venue name. force_neutral marks scheduled neutral or special-event sites.
+Williamsport,williamsport,TRUE,Case-insensitive match on the venue name. force_neutral marks scheduled neutral or special-event sites.
+Bowman Field,williamsport,TRUE,Case-insensitive match on the venue name. force_neutral marks scheduled neutral or special-event sites.
+State Farm,glendale,FALSE,Case-insensitive match on the venue name. force_neutral marks scheduled neutral or special-event sites.
+Empower Field,denver,FALSE,Case-insensitive match on the venue name. force_neutral marks scheduled neutral or special-event sites.
+Coors Field,denver,FALSE,Case-insensitive match on the venue name. force_neutral marks scheduled neutral or special-event sites.
+Ball Arena,denver,FALSE,Case-insensitive match on the venue name. force_neutral marks scheduled neutral or special-event sites.
+Delta Center,salt_lake,FALSE,Case-insensitive match on the venue name. force_neutral marks scheduled neutral or special-event sites.
+Vivint,salt_lake,FALSE,Case-insensitive match on the venue name. force_neutral marks scheduled neutral or special-event sites.
+Rogers Centre,toronto,FALSE,Case-insensitive match on the venue name. force_neutral marks scheduled neutral or special-event sites.
+Sutter Health,sacramento,FALSE,Case-insensitive match on the venue name. force_neutral marks scheduled neutral or special-event sites.
