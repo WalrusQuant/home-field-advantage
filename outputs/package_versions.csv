@@ -1,6 +1,6 @@
 package,version
-dplyr,1.2.1
-ggplot2,4.0.4
+dplyr,1.2.0
+ggplot2,4.0.2
 readr,2.2.0
 ggrepel,0.9.8
 jsonlite,2.0.0

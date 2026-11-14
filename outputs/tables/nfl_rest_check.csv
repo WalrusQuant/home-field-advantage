@@ -1,2 +1,2 @@
 n,mean_ours_minus_nflverse,share_within_1_day,note
-6657,-0.9972960793150067,0.9983476040258374,"Ours is calendar days between games, minus 1. The first game of a season is missing. nflverse week-1 rest is a placeholder and is excluded."
+6657,-0.9972960793150069,0.9983476040258374,"Ours is calendar days between games, minus 1. The first game of a season is missing. nflverse week-1 rest is a placeholder and is excluded."
